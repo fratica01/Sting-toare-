@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+  <title>Tehnic Sting Distribuții – Comune vizitate & Magazine</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <style>
+    :root{
+      --bg:#ffffff;--fg:#111;--muted:#666;--line:#e5e7eb;
+      --brand:#b91c1c; /* roșu brand */
+      --accent:#ef4444; --ok:#16a34a; --warn:#dc2626; --chip:#f3f4f6;
+    }
+    html,body{height:100%;margin:0}
+    #map{height:100%;width:100%}
+    #panel{
+      position:fixed;top:.6rem;left:.6rem;right:.6rem;z-index:999;background:var(--bg);color:var(--fg);
+      border-radius:.9rem;border:1px solid var(--line);box-shadow:0 12px 30px rgba(0,0,0,.12);overflow:hidden
+    }
+    #brandbar{
+      display:flex;align-items:center;gap:.6rem;padding:.55rem .75rem;background:var(--brand);color:#fff;
+    }
+    #brandbar .title{font-weight:800;letter-spacing:.2px}
+    #brandbar small{opacity:.9}
+    #panel header{display:flex;align-items:center;justify-content:space-between;padding:.5rem .75rem;
+      background:linear-gradient(180deg,#fff,#fafafa);border-bottom:1px solid var(--line);font-weight:700}
+    #panel header .meta{font-weight:500;font-size:.9rem;color:var(--muted)}
+    .tabs{display:flex;border-bottom:1px solid var(--line)}
+    .tab{flex:1;text-align:center;padding:.55rem .2rem;font-weight:700;border-bottom:2px solid transparent}
+    .tab.active{border-color:var(--brand);color:var(--brand)}
+    .content{padding:.6rem .75rem .8rem}
+    .row{display:grid;grid-template-columns:1fr auto;gap:.5rem;align-items:center;margin-bottom:.55rem}
+    .row3{display:grid;grid-template-columns:1fr auto auto;gap:.5rem;align-items:center;margin-bottom:.55rem}
+    .row2{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;align-items:center;margin-bottom:.55rem}
+    input[type="text"], input[type="date"], input[type="tel"], select{width:100%;font-size:1rem;padding:.6rem .7rem;border:1px solid var(--line);border-radius:.6rem;outline:none;background:#fff}
+    input:focus, select:focus{border-color:var(--brand)}
+    .btn{appearance:none;border:1px solid var(--line);background:#fff;padding:.55rem .7rem;border-radius:.6rem;font-size:.95rem}
+    .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+    .btn.ok{background:var(--ok);border-color:var(--ok);color:#fff}
+    .btn.warn{background:var(--warn);border-color:var(--warn);color:#fff}
+    .muted{color:var(--muted);font-size:.85rem}
+    .pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.2rem}
+    .pill{font-size:.8rem;padding:.25rem .5rem;border-radius:999px;border:1px solid var(--line);background:var(--chip)}
+    #status{font-weight:700}
+    #toggle{border:0;background:transparent;font-size:1.15rem;padding:.2rem .4rem;border-radius:.5rem}
+    .hidden{display:none}
+    .card{border:1px solid var(--line);border-radius:.6rem;padding:.55rem .6rem;margin:.4rem 0;background:#fff}
+    .card h4{margin:.1rem 0 .3rem;font-size:1rem}
+    .card small{color:var(--muted)}
+    .card .actions{display:flex;gap:.4rem;margin-top:.35rem}
+    .watermark{
+      position:fixed;right:.5rem;bottom:.5rem;font-weight:700;color:rgba(185,28,28,.12);font-size:1.2rem;z-index:1;
+      pointer-events:none;user-select:none
+    }
+  </style>
+</head>
+<body>
+  <div id="panel">
+    <div id="brandbar">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 2l2.5 5 5.5.8-4 3.9.9 5.6-4.9-2.6-4.9 2.6.9-5.6-4-3.9 5.5-.8L12 2z" fill="#fff"/>
+      </svg>
+      <div>
+        <div class="title">Tehnic Sting Distribuții</div>
+        <small>Harta intervențiilor & gestiune magazine clienți</small>
+      </div>
+    </div>
+    <header>
+      <div>
+        Comune vizitate & Magazine
+        <div class="meta">Vizitate: <span id="cntVisited">0</span> · Total încărcate: <span id="cntTotal">0</span></div>
+      </div>
+      <button id="toggle" title="Ascunde/arată panoul">☰</button>
+    </header>
+    <div class="tabs">
+      <div id="tabAdd" class="tab active">Adaugă comună</div>
+      <div id="tabFind" class="tab">Caută comună</div>
+      <div id="tabShops" class="tab">Magazine</div>
+    </div>
+    <div id="viewAdd" class="content">
+      <div class="row3">
+        <input id="addInput" type="text" placeholder="Ex: Comuna Mărăcineni, Buzău / Oraș Râmnicu Sărat"/>
+        <button id="btnPreviewAdd" class="btn">Previzualizează</button>
+        <button id="btnAddVisited" class="btn primary">Marchează vizitat</button>
+      </div>
+      <div class="row">
+        <button id="btnShowOnlyVisited" class="btn">Afișează doar vizitate</button>
+        <button id="btnLoadPlaces" class="btn">Încarcă orașe/sate (puncte)</button>
+      </div>
+      <div class="row">
+        <button id="btnExport" class="btn ok">Exportă vizitate</button>
+        <button id="btnImport" class="btn warn">Importă vizitate</button>
+      </div>
+      <div class="row">
+        <button id="btnReset" class="btn warn">Resetează marcajele</button>
+        <span class="muted">Datele se salvează pe telefon (localStorage).</span>
+      </div>
+    </div>
+    <div id="viewFind" class="content hidden">
+      <div class="row3">
+        <input id="findInput" type="text" placeholder="Caută comună/oraș (ex: Comuna Mărăcineni, Buzău)"/>
+        <button id="btnPreviewFind" class="btn">Previzualizează</button>
+        <button id="btnCheckVisited" class="btn primary">Verifică</button>
+      </div>
+      <div class="pills">
+        <span class="pill">Status: <span id="status">—</span></span>
+        <span class="pill">ID: <span id="statusId">—</span></span>
+      </div>
+    </div>
+    <div id="viewShops" class="content hidden">
+      <div class="row">
+        <select id="shopCommuneSelect"></select>
+        <div class="row" style="grid-template-columns:auto auto;gap:.4rem;margin:0">
+          <button id="btnExportShopsAll" class="btn ok">Exportă tot</button>
+          <button id="btnExportShops" class="btn ok">Exportă</button>
+        </div>
+      </div>
+      <div id="shopList"></div>
+      <hr style="border:none;border-top:1px solid var(--line);margin:.6rem 0"/>
+      <h3 style="margin:.2rem 0 .4rem">Adaugă magazin</h3>
+      <div class="row2">
+        <input id="shopName" type="text" placeholder="Nume magazin / client"/>
+        <input id="shopDate" type="date" />
+      </div>
+      <div class="row2">
+        <input id="shopAddress" type="text" placeholder="Adresă (opțional)"/>
+        <input id="shopPhone" type="tel" placeholder="Telefon (opțional)"/>
+      </div>
+      <div class="row2">
+        <select id="extTemplate">
+          <option value="">Șablon stingătoare (opțional)</option>
+          <option value="P1=2;P3=2;P6=1;G2=1">P1×2, P3×2, P6×1, CO₂ 2kg×1</option>
+          <option value="P6=3;P9=2">P6×3, P9×2</option>
+          <option value="G2=2;G5=1">CO₂ 2kg×2, CO₂ 5kg×1</option>
+        </select>
+        <input id="extCustom" type="text" placeholder="Altă combinație (ex: P1=4;P6=1)"/>
+      </div>
+      <div class="row">
+        <input id="shopNotes" type="text" placeholder="Observații (persoană contact, nr. bucăți, presiuni, serie etc.)"/>
+        <button id="btnAddShop" class="btn primary">Adaugă</button>
+      </div>
+      <div class="row">
+        <button id="btnImportShops" class="btn warn">Importă</button>
+        <button id="btnDeleteAllShops" class="btn warn">Șterge toate din comuna selectată</button>
+      </div>
+      <div class="muted">La salvare, se calculează automat „Următoarea verificare” = data + 12 luni.</div>
+    </div>
+  </div>
+  <div id="map"></div>
+  <div class="watermark">Tehnic Sting Distribuții</div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet-geometryutil@0.10.3/src/leaflet.geometryutil.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script>
+    // Map init
+    const map = L.map('map');
+    const roCenter=[45.9432,24.9668];
+    map.setView(roCenter,7);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+      maxZoom:19,
+      attribution:'&copy; Contribuitori <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
+    }).addTo(map);
+
+    // Layers
+    const layerVisited = L.featureGroup().addTo(map);
+    const layerPreview = L.featureGroup().addTo(map);
+    const layerOtherPlaces = L.markerClusterGroup ? L.markerClusterGroup({chunkedLoading:true,disableClusteringAtZoom:12}) : L.featureGroup();
+    map.addLayer(layerOtherPlaces);
+
+    // State
+    const visitedIndex = new Map(); // key: osmKey -> {name, type, id}
+    let showOnlyVisited=false;
+    const cntVisitedEl=document.getElementById('cntVisited');
+    const cntTotalEl=document.getElementById('cntTotal');
+    const statusEl=document.getElementById('status');
+    const statusIdEl=document.getElementById('statusId');
+
+    // Shops DB (per commune key)
+    function loadShopsDB(){
+      try{ return JSON.parse(localStorage.getItem('shops_by_commune')||'{}'); }catch(_){ return {}; }
+    }
+    function saveShopsDB(db){ localStorage.setItem('shops_by_commune', JSON.stringify(db)); }
+    let shopsDB = loadShopsDB();
+
+    function updateCounters(){
+      cntVisitedEl.textContent=visitedIndex.size;
+      cntTotalEl.textContent=layerVisited.getLayers().length + layerOtherPlaces.getLayers().length;
+    }
+
+    // Helpers
+    function osmKey(osm_type, osm_id){
+      const p = (osm_type||'').charAt(0).toUpperCase(); // N/W/R
+      return p + String(osm_id);
+    }
+    function saveVisited(){
+      const arr = [];
+      visitedIndex.forEach((v,k)=>arr.push({k,name:v.name,osm_type:v.osm_type,osm_id:v.osm_id}));
+      localStorage.setItem('ro_communes_visited', JSON.stringify(arr));
+      updateCounters();
+      refreshShopCommuneSelect();
+    }
+    function loadVisited(){
+      try{
+        const arr = JSON.parse(localStorage.getItem('ro_communes_visited')||'[]');
+        return Array.isArray(arr)?arr:[];
+      }catch(_){ return []; }
+    }
+
+    function toast(text){
+      const el=document.createElement('div');
+      el.textContent=text;
+      el.style.position='fixed'; el.style.bottom='.8rem'; el.style.left='50%';
+      el.style.transform='translateX(-50%)'; el.style.background='#111'; el.style.color='#fff';
+      el.style.padding='.5rem .75rem'; el.style.borderRadius='.6rem'; el.style.zIndex=10000; el.style.opacity='.95';
+      document.body.appendChild(el);
+      setTimeout(()=>{el.style.transition='opacity .4s'; el.style.opacity='0'}, 1200);
+      setTimeout(()=>el.remove(), 1700);
+    }
+
+    function setLoading(on, text){
+      let el=document.getElementById('loading');
+      if(on){
+        if(!el){
+          el=document.createElement('div'); el.id='loading';
+          el.style.position='fixed'; el.style.top='50%'; el.style.left='50%'; el.style.transform='translate(-50%,-50%)';
+          el.style.background='rgba(17,17,17,.92)'; el.style.color='#fff'; el.style.padding='1rem 1.2rem';
+          el.style.borderRadius='.8rem'; el.style.zIndex='10001'; el.style.textAlign='center';
+          document.body.appendChild(el);
+        }
+        el.textContent = text || 'Se încarcă...'; el.classList.remove('hidden');
+      } else if(el){ el.classList.add('hidden'); }
+    }
+
+    function styleVisited(){ return {color: 'var(--brand)', weight:2, fillColor: 'var(--accent)', fillOpacity:0.35}; }
+    function stylePreview(){ return {color:'#0ea5e9', weight:2, dashArray:'4,4', fillOpacity:0.05}; }
+
+    function fitLayer(layer){ try { map.fitBounds(layer.getBounds(), {padding:[20,20]}); } catch(_){ } }
+
+    // Nominatim helpers
+    async function nominatimSearchAdmin8(q){
+      q=(q||'').trim(); if(!q) return [];
+      const url=`https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=ro&addressdetails=1&namedetails=1&polygon_geojson=1&limit=5&q=${encodeURIComponent(q)}`;
+      const res = await fetch(url, {headers:{'Accept':'application/json'}});
+      if(!res.ok) throw new Error('Eroare Nominatim '+res.status);
+      const arr = await res.json();
+      const filtered = arr.filter(x => x.class==='boundary' && x.type==='administrative');
+      filtered.sort((a,b)=>{
+        const al=(a.extratags&&a.extratags.admin_level)||'';
+        const bl=(b.extratags&&b.extratags.admin_level)||'';
+        const as = (al==='8')?0:1;
+        const bs = (bl==='8')?0:1;
+        if(as!==bs) return as-bs;
+        return (a.importance||0) > (b.importance||0) ? -1 : 1;
+      });
+      return filtered.length?filtered:arr;
+    }
+    async function nominatimLookupMany(keys){
+      if(!keys.length) return [];
+      const chunks=[];
+      for(let i=0;i<keys.length;i+=45) chunks.push(keys.slice(i,i+45));
+      const out=[];
+      for(const c of chunks){
+        const ids=c.map(k=>k[0]+k.slice(1)).join(',');
+        const url=`https://nominatim.openstreetmap.org/lookup?format=jsonv2&polygon_geojson=1&osm_ids=${encodeURIComponent(ids)}`;
+        const res=await fetch(url,{headers:{'Accept':'application/json'}});
+        if(!res.ok) throw new Error('Eroare Nominatim '+res.status);
+        out.push(...await res.json());
+      }
+      return out;
+    }
+
+    function bindVisitedPopup(layer, item){
+      const name = item.namedetails?.name || item.display_name?.split(',')[0] || 'Comună';
+      const k = osmKey(item.osm_type, item.osm_id);
+      layer.bindPopup(`<b>${escapeHtml(name)}</b><br>
+        <button id="ppGoShops">Magazine – Tehnic Sting</button>`);
+      layer.on('popupopen', ()=>{
+        const btn=document.getElementById('ppGoShops');
+        if(btn){ btn.onclick=()=>{ setTab('shops'); setShopCommune(k); }; }
+      });
+      layer.on('click', ()=>{ setTab('shops'); setShopCommune(k); });
+    }
+
+    function addVisitedFeatureFromNominatim(item){
+      const k=osmKey(item.osm_type, item.osm_id);
+      if(visitedIndex.has(k)) return visitedIndex.get(k);
+      const name = item.namedetails?.name || item.display_name?.split(',')[0] || item.name || 'Comună';
+      const gj = item.geojson;
+      if(!gj){ return null; }
+      const lyr = L.geoJSON(gj, {style: styleVisited()}).addTo(layerVisited);
+      bindVisitedPopup(lyr, item);
+      visitedIndex.set(k, {name, osm_type:item.osm_type, osm_id:item.osm_id});
+      saveVisited();
+      updateCounters();
+      return lyr;
+    }
+
+    function escapeHtml(str){ return String(str||'').replace(/[&<>"']/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s])); }
+
+    // Add tab: preview + add
+    async function previewAdd(){
+      const q=document.getElementById('addInput').value;
+      if(!q) return;
+      setLoading(true, 'Caut limita administrativă...');
+      try{
+        const res=await nominatimSearchAdmin8(q);
+        if(!res.length){ setLoading(false); alert('Nu am găsit nimic. Încearcă cu județul inclus.'); return; }
+        layerPreview.clearLayers();
+        const item=res[0];
+        const name=item.namedetails?.name || item.display_name?.split(',')[0] || 'Rezultat';
+        const lyr=L.geoJSON(item.geojson, {style: stylePreview()}).addTo(layerPreview);
+        lyr.bindPopup(`<b>${escapeHtml(name)}</b><br/><button id="btnAddFromPopup">Marchează vizitat</button>`);
+        fitLayer(lyr);
+        setLoading(false);
+        setTimeout(()=>{
+          const btn=document.getElementById('btnAddFromPopup'); if(btn) btn.onclick=()=>addVisitedFromItem(item);
+        }, 250);
+      }catch(e){ setLoading(false); alert('Căutarea a eșuat. Verifică internetul.'); }
+    }
+    async function addVisited(){
+      const q=document.getElementById('addInput').value;
+      if(!q) return;
+      setLoading(true,'Adaug comună...');
+      try{
+        const res=await nominatimSearchAdmin8(q);
+        if(!res.length){ setLoading(false); alert('Nu am găsit comuna.'); return; }
+        const item=res[0];
+        await addVisitedFromItem(item,true);
+        setLoading(false);
+      }catch(e){ setLoading(false); alert('Nu am putut adăuga.'); }
+    }
+    async function addVisitedFromItem(item, doFit){
+      const k=osmKey(item.osm_type,item.osm_id);
+      layerPreview.clearLayers();
+      const lyr = addVisitedFeatureFromNominatim(item);
+      if(lyr&&doFit) fitLayer(lyr);
+      toast('Marcat vizitat: '+(item.namedetails?.name||item.display_name?.split(',')[0]||'Comună'));
+      setTab('shops'); setShopCommune(k);
+    }
+
+    // Find tab
+    async function previewFind(){
+      const q=document.getElementById('findInput').value;
+      if(!q) return;
+      setLoading(true,'Caut comuna/orașul...');
+      try{
+        const res=await nominatimSearchAdmin8(q);
+        if(!res.length){ setLoading(false); alert('N-am găsit.'); return; }
+        layerPreview.clearLayers();
+        const item=res[0];
+        const name=item.namedetails?.name || item.display_name?.split(',')[0] || 'Rezultat';
+        const lyr=L.geoJSON(item.geojson,{style:stylePreview()}).addTo(layerPreview);
+        const k=osmKey(item.osm_type,item.osm_id);
+        const visited=visitedIndex.has(k);
+        lyr.bindPopup(`<b>${escapeHtml(name)}</b><br/>Status: <b>${visited?'VIZITAT':'NEVIZITAT'}</b>${visited?'':'<br/><button id="btnAddNow">Marchează vizitat</button>'}`);
+        fitLayer(lyr);
+        statusEl.textContent = (visited?'VIZITAT':'NEVIZITAT');
+        statusIdEl.textContent = k;
+        setLoading(false);
+        setTimeout(()=>{
+          const btn=document.getElementById('btnAddNow'); if(btn) btn.onclick=()=>addVisitedFromItem(item);
+        },250);
+      }catch(e){ setLoading(false); alert('Căutare eșuată.'); }
+    }
+    async function checkVisited(){ const q=document.getElementById('findInput').value; if(!q) return previewFind(); await previewFind(); }
+
+    // Load visited at start
+    async function reloadVisitedAtStart(){
+      const stored = loadVisited(); if(!stored.length) { refreshShopCommuneSelect(); return; }
+      setLoading(true,'Reîncarc comunele vizitate...');
+      try{
+        const keys = stored.map(x=>x.k);
+        const items = await nominatimLookupMany(keys);
+        for(const it of items){
+          const lyr = addVisitedFeatureFromNominatim(it);
+          if(lyr){ bindVisitedPopup(lyr, it); }
+        }
+        setLoading(false);
+        if(layerVisited.getLayers().length){ fitLayer(layerVisited); }
+      }catch(e){ setLoading(false); console.warn('Nu am putut reîncărca toate comunele.'); }
+      refreshShopCommuneSelect();
+    }
+
+    // Optional: load towns/villages as points
+    let placesLoaded=false;
+    async function loadPlaces(){
+      if(placesLoaded){ togglePlaces(); return; }
+      setLoading(true,'Încarc orașe și sate (puncte)...');
+      try{
+        const query=`[out:json][timeout:180];
+area["ISO3166-1"="RO"][admin_level=2]->.a;
+(
+  node["place"~"city|town|village|hamlet"](area.a);
+);
+out body;`;
+        const url='https://overpass-api.de/api/interpreter?data='+encodeURIComponent(query);
+        const res=await fetch(url);
+        if(!res.ok) throw new Error('Overpass '+res.status);
+        const data=await res.json();
+        const nodes=data.elements||[];
+        let n=0;
+        for(const el of nodes){
+          const name=(el.tags&& (el.tags['name:ro']||el.tags.name))||'';
+          if(!name) continue;
+          const m=L.circleMarker([el.lat,el.lon],{radius:3,weight:1,color: getComputedStyle(document.documentElement).getPropertyValue('--ok') || '#16a34a',fillOpacity:.8});
+          m.bindPopup(`<b>${escapeHtml(name)}</b>`);
+          layerOtherPlaces.addLayer(m); n++;
+        }
+        placesLoaded=true; setLoading(false);
+        toast('Încărcat '+n+' puncte (orașe/sate)');
+        updateCounters();
+      }catch(e){ setLoading(false); alert('Nu am putut încărca punctele.'); }
+    }
+    function togglePlaces(){
+      if(map.hasLayer(layerOtherPlaces)){ map.removeLayer(layerOtherPlaces); toast('Ascuns punctele'); }
+      else { map.addLayer(layerOtherPlaces); toast('Afișez punctele'); }
+      updateCounters();
+    }
+
+    function toggleOnlyVisited(){
+      showOnlyVisited=!showOnlyVisited;
+      if(showOnlyVisited){
+        if(map.hasLayer(layerOtherPlaces)) map.removeLayer(layerOtherPlaces);
+        layerPreview.clearLayers();
+        toast('Afișez doar vizitate');
+      }else{
+        toast('Afișez tot');
+      }
+    }
+
+    // Export/Import/Reset visited
+    function doExport(){
+      const list=[]; visitedIndex.forEach((v,k)=>list.push({id:k,name:v.name,osm_type:v.osm_type,osm_id:v.osm_id}));
+      const text=JSON.stringify(list,null,2);
+      try{ navigator.clipboard.writeText(text); toast('Copiat în clipboard'); }
+      catch(_){
+        const blob=new Blob([text],{type:'application/json'});
+        const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='comune_vizitate.json'; a.click(); URL.revokeObjectURL(a.href);
+      }
+    }
+    function doImport(){
+      const text=prompt('Lipește aici JSON-ul exportat:');
+      if(!text) return;
+      try{
+        const arr=JSON.parse(text);
+        const keys=[];
+        for(const it of arr){
+          const k = it.id || osmKey(it.osm_type, it.osm_id);
+          if(!k) continue;
+          if(!visitedIndex.has(k)){
+            visitedIndex.set(k,{name:it.name||'Comună',osm_type:k[0],osm_id:parseInt(k.slice(1),10)});
+          }
+          keys.push(k);
+        }
+        saveVisited();
+        nominatimLookupMany(keys).then(items=>{
+          for(const it of items) addVisitedFeatureFromNominatim(it);
+          toast('Import terminat');
+        });
+      }catch(e){ alert('JSON invalid.'); }
+    }
+    function doReset(){
+      if(!confirm('Șterg toate marcajele vizitate?')) return;
+      visitedIndex.clear(); saveVisited();
+      layerVisited.clearLayers();
+      updateCounters();
+      refreshShopCommuneSelect();
+      toast('Resetat.');
+    }
+
+    // SHOPS TAB LOGIC
+    const shopSelect = document.getElementById('shopCommuneSelect');
+    const shopList = document.getElementById('shopList');
+    const shopName = document.getElementById('shopName');
+    const shopDate = document.getElementById('shopDate');
+    const shopAddress = document.getElementById('shopAddress');
+    const shopPhone = document.getElementById('shopPhone');
+    const shopNotes = document.getElementById('shopNotes');
+    const extTemplate = document.getElementById('extTemplate');
+    const extCustom = document.getElementById('extCustom');
+
+    function refreshShopCommuneSelect(){
+      const entries = Array.from(visitedIndex.entries()).map(([k,v])=>({k,name:v.name})).sort((a,b)=>a.name.localeCompare(b.name,'ro'));
+      shopSelect.innerHTML = entries.length ? entries.map(e=>`<option value="${e.k}">${escapeHtml(e.name)} (${e.k})</option>`).join('') : '<option value="">— Nu există comune vizitate —</option>';
+      if(entries.length){
+        if(!shopSelect.value || !visitedIndex.has(shopSelect.value)) shopSelect.value = entries[0].k;
+      }
+      renderShopList();
+    }
+
+    function setShopCommune(key){
+      if(!visitedIndex.has(key)){ toast('Adaugă mai întâi comuna ca vizitată.'); return; }
+      refreshShopCommuneSelect();
+      shopSelect.value = key;
+      renderShopList();
+    }
+
+    function renderShopList(){
+      const key = shopSelect.value;
+      const arr = (shopsDB[key]||[]);
+      if(!key){ shopList.innerHTML = '<div class="muted">Alege o comună vizitată ca să vezi/adaugi magazine.</div>'; return; }
+      if(!arr.length){ shopList.innerHTML = '<div class="muted">Încă nu ai magazine salvate aici.</div>'; return; }
+      shopList.innerHTML = arr.map((it, idx)=>`
+        <div class="card">
+          <h4>${escapeHtml(it.name||'Magazin')}</h4>
+          <small>
+            ${it.date?('Serviciu: '+escapeHtml(it.date)):'—'}
+            ${it.next?(' · Următoarea: '+escapeHtml(it.next)) : ''}
+            ${it.address?(' · '+escapeHtml(it.address)) : ''}
+            ${it.phone?(' · Tel: '+escapeHtml(it.phone)) : ''}
+          </small>
+          ${it.ext?`<div style="margin-top:.35rem"><b>Stingătoare:</b> ${escapeHtml(it.ext)}</div>`:''}
+          ${it.notes?`<div style="margin-top:.35rem">${escapeHtml(it.notes)}</div>`:''}
+          <div class="actions">
+            <button class="btn" data-action="edit" data-idx="${idx}">Editează</button>
+            <button class="btn warn" data-action="del" data-idx="${idx}">Șterge</button>
+          </div>
+        </div>
+      `).join('');
+      // wire actions
+      shopList.querySelectorAll('button[data-action]').forEach(btn=>{
+        btn.addEventListener('click', (e)=>{
+          const idx = parseInt(e.target.getAttribute('data-idx'),10);
+          const action = e.target.getAttribute('data-action');
+          const key = shopSelect.value;
+          const arr = (shopsDB[key]||[]);
+          if(action==='del'){
+            if(confirm('Șterg acest magazin?')){
+              arr.splice(idx,1); shopsDB[key]=arr; saveShopsDB(shopsDB); renderShopList(); toast('Șters.');
+            }
+          } else if(action==='edit'){
+            const it = arr[idx];
+            const name = prompt('Nume magazin:', it.name||'') ?? it.name;
+            if(name===null) return;
+            const date = prompt('Data (YYYY-MM-DD):', it.date||'') ?? it.date;
+            const address = prompt('Adresă:', it.address||'') ?? it.address;
+            const phone = prompt('Telefon:', it.phone||'') ?? it.phone;
+            const ext = prompt('Stingătoare (ex: P1=2;P6=1;G2=1):', it.ext||'') ?? it.ext;
+            const notes = prompt('Observații:', it.notes||'') ?? it.notes;
+            const next = calcNext(date);
+            arr[idx] = {name,date,next,address,phone,ext,notes};
+            shopsDB[key]=arr; saveShopsDB(shopsDB); renderShopList(); toast('Actualizat.');
+          }
+        });
+      });
+    }
+
+    function calcNext(dateStr){
+      if(!dateStr) return '';
+      const d = new Date(dateStr);
+      if(isNaN(d.getTime())) return '';
+      const n = new Date(d); n.setMonth(n.getMonth()+12);
+      const yyyy = n.getFullYear();
+      const mm = String(n.getMonth()+1).padStart(2,'0');
+      const dd = String(n.getDate()).padStart(2,'0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    function parseExtTemplate(){
+      const t = extTemplate.value || '';
+      const c = extCustom.value.trim();
+      return c || t || '';
+    }
+
+    function addShop(){
+      const key = shopSelect.value;
+      if(!key){ alert('Alege o comună vizitată.'); return; }
+      const name = shopName.value.trim();
+      if(!name){ alert('Scrie numele magazinului.'); return; }
+      const date = shopDate.value || '';
+      const rec = {
+        name,
+        date,
+        next: calcNext(date),
+        address: shopAddress.value.trim(),
+        phone: shopPhone.value.trim(),
+        ext: parseExtTemplate(),
+        notes: shopNotes.value.trim()
+      };
+      const arr = shopsDB[key] || [];
+      arr.push(rec);
+      shopsDB[key] = arr;
+      saveShopsDB(shopsDB);
+      renderShopList();
+      shopName.value=''; shopDate.value=''; shopAddress.value=''; shopPhone.value=''; shopNotes.value=''; extTemplate.value=''; extCustom.value='';
+      toast('Magazin adăugat.');
+    }
+
+    function exportShops(){
+      const key = shopSelect.value;
+      if(!key){ alert('Alege o comună.'); return; }
+      const out = { commune:key, name: visitedIndex.get(key)?.name || '', shops: (shopsDB[key]||[]) };
+      const text = JSON.stringify(out, null, 2);
+      try{ navigator.clipboard.writeText(text); toast('Copiat în clipboard'); }
+      catch(_){
+        const blob=new Blob([text],{type:'application/json'});
+        const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`${(visitedIndex.get(key)?.name||'comuna')}_magazine.json`; a.click(); URL.revokeObjectURL(a.href);
+      }
+    }
+    function exportShopsAll(){
+      const out = [];
+      Object.keys(shopsDB).forEach(k=>{
+        out.push({commune:k, name: visitedIndex.get(k)?.name || '', shops: shopsDB[k]});
+      });
+      const text = JSON.stringify(out, null, 2);
+      try{ navigator.clipboard.writeText(text); toast('Copiat în clipboard'); }
+      catch(_){
+        const blob=new Blob([text],{type:'application/json'});
+        const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='tehnic_sting_magazine_toate.json'; a.click(); URL.revokeObjectURL(a.href);
+      }
+    }
+    function importShops(){
+      const key = shopSelect.value;
+      if(!key){ alert('Alege o comună.'); return; }
+      const text = prompt('Lipește JSON-ul exportat (sau listă simplă de magazine):');
+      if(!text) return;
+      try{
+        let obj = JSON.parse(text);
+        if(Array.isArray(obj)){
+          shopsDB[key] = obj;
+        } else if(obj && obj.shops){
+          shopsDB[key] = obj.shops;
+        } else {
+          throw new Error('format');
+        }
+        saveShopsDB(shopsDB); renderShopList(); toast('Importat.');
+      }catch(e){
+        alert('JSON invalid. Asigură-te că e din exportul anterior.');
+      }
+    }
+    function deleteAllShops(){
+      const key = shopSelect.value;
+      if(!key) return;
+      if(confirm('Șterg toate magazinele din comuna selectată?')){
+        shopsDB[key]=[]; saveShopsDB(shopsDB); renderShopList(); toast('Golire completă.');
+      }
+    }
+
+    // Wire UI
+    document.getElementById('btnPreviewAdd').onclick=previewAdd;
+    document.getElementById('btnAddVisited').onclick=addVisited;
+    document.getElementById('btnPreviewFind').onclick=previewFind;
+    document.getElementById('btnCheckVisited').onclick=checkVisited;
+    document.getElementById('btnLoadPlaces').onclick=loadPlaces;
+    document.getElementById('btnShowOnlyVisited').onclick=toggleOnlyVisited;
+    document.getElementById('btnExport').onclick=doExport;
+    document.getElementById('btnImport').onclick=doImport;
+    document.getElementById('btnReset').onclick=doReset;
+
+    // Shops UI
+    shopSelect.onchange = renderShopList;
+    document.getElementById('btnAddShop').onclick = addShop;
+    document.getElementById('btnExportShops').onclick = exportShops;
+    document.getElementById('btnExportShopsAll').onclick = exportShopsAll;
+    document.getElementById('btnImportShops').onclick = importShops;
+    document.getElementById('btnDeleteAllShops').onclick = deleteAllShops;
+
+    // Tabs
+    const tabAdd=document.getElementById('tabAdd');
+    const tabFind=document.getElementById('tabFind');
+    const tabShops=document.getElementById('tabShops');
+    const viewAdd=document.getElementById('viewAdd');
+    const viewFind=document.getElementById('viewFind');
+    const viewShops=document.getElementById('viewShops');
+    function setTab(which){
+      [tabAdd, tabFind, tabShops].forEach(t=>t.classList.remove('active'));
+      [viewAdd, viewFind, viewShops].forEach(v=>v.classList.add('hidden'));
+      if(which==='add'){ tabAdd.classList.add('active'); viewAdd.classList.remove('hidden'); }
+      else if(which==='find'){ tabFind.classList.add('active'); viewFind.classList.remove('hidden'); }
+      else { tabShops.classList.add('active'); viewShops.classList.remove('hidden'); }
+    }
+    tabAdd.onclick=()=>setTab('add');
+    tabFind.onclick=()=>setTab('find');
+    tabShops.onclick=()=>setTab('shops');
+
+    // Collapse
+    const toggleBtn=document.getElementById('toggle');
+    const tabsEl=document.querySelector('.tabs');
+    let collapsed=false;
+    toggleBtn.onclick=()=>{
+      collapsed=!collapsed;
+      tabsEl.classList.toggle('hidden',collapsed);
+      viewAdd.classList.toggle('hidden',collapsed);
+      viewFind.classList.add('hidden');
+      viewShops.classList.add('hidden');
+    };
+
+    // On start: geolocate + reload visited + refresh shops select
+    if('geolocation' in navigator){
+      navigator.geolocation.getCurrentPosition(pos=>{
+        map.setView([pos.coords.latitude,pos.coords.longitude], 10);
+      },()=>{}, {enableHighAccuracy:true, timeout:5000});
+    }
+    reloadVisitedAtStart();
+    refreshShopCommuneSelect();
+
+  </script>
+</body>
+</html>
